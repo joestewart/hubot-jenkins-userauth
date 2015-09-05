@@ -18,6 +18,8 @@
 #   hubot jenkins describe <job> - Describes the specified Jenkins job
 #   hubot jenkins last <job> - Details about the last build for the specified Jenkins job
 #   hubot jenkins set auth <user:apitoken> - Set jenkins credentials (get token from https://<jenkins>/user/<user>/configure)
+#   hubot jenkins show|show last|last (build|failure|output) for {job} - show output for last job.
+#   hubot jenkins show|show job output|job output for {job} {number} - show output job output for number given.
 #
 # Author:
 #   dougcole
@@ -224,7 +226,45 @@ jenkinsList = (msg) ->
       catch error
         msg.send error
 
+showBuildOuput = (msg) ->
+  url = process.env.HUBOT_JENKINS_URL
+  lastJob = if msg.match[2].trim() == "failure" then "lastFailedBuild" else "lastBuild"
+  job = msg.match[3].trim()
+  req = msg.http("#{url}/job/#{job}/#{lastJob}/logText/progressiveText") 
 
+  auth = new Buffer(jenkinsUserCredentials(msg)).toString('base64')
+  req.headers Authorization: "Basic #{auth}"
+
+  req.get() (err, res, body) ->
+    response = ""
+    if err
+      msg.send "Jenkins says: #{err}"
+    else
+      msg.send """
+          #{url}/job/#{job}/#{lastJob}/console
+          Output is:
+          #{body}
+        """ 
+
+showSpecificBuildOuput = (msg) ->
+  url = process.env.HUBOT_JENKINS_URL
+  job = msg.match[2].trim()
+  jobNumber = msg.match[3].trim()
+  req = msg.http("#{url}/job/#{job}/#{jobNumber}/logText/progressiveText")
+
+  auth = new Buffer(jenkinsUserCredentials(msg)).toString('base64')
+  req.headers Authorization: "Basic #{auth}"
+
+  req.get() (err, res, body) ->
+    response = ""
+    if err
+      msg.send "Jenkins says: #{err}"
+    else
+      msg.send """
+          #{url}/job/#{job}/#{jobNumber}/console
+          Output is:
+          #{body}
+        """
 
 module.exports = (robot) ->
   robot.respond /j(?:enkins)? build ([\w\.\-_ ]+)(, (.+))?/i, (msg) ->
@@ -244,6 +284,12 @@ module.exports = (robot) ->
 
   robot.respond /j(?:enkins)? set auth (.*)/i, (msg) ->
     jenkinsAuth(msg)
+
+  robot.respond /j(?:enkins)? (show|show last|last) (build|failure|output) for (.+)\.?/i, (msg) ->
+    showBuildOuput(msg)
+ 
+  robot.respond /j(?:enkins)? (show|show job output|job output) for (.+) ([0-9]+)\.?/i, (msg) ->
+    showSpecificBuildOuput(msg)
 
   robot.jenkins = {
     list: jenkinsList,
